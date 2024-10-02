@@ -37,9 +37,6 @@ reg_addressMap = {
     '$ra': '11111', '$31': '11111'
 }
 
-#my name is harish gehlot
-#my roll no is b22ee
-
 #register values
 reg_values = {
     '00000': 0,
