@@ -152,6 +152,7 @@ def parse_data_section(lines):
             if '.word' in line:
                 # Store a single word (4 bytes) in memory
                 value = int(line.split('.word')[1].strip())
+                filled = 4-filled%4
                 label_mem[current_label] = mem_start_address+filled
                 data_memory[mem_start_address+filled] = value
                 filled += 4
@@ -160,6 +161,7 @@ def parse_data_section(lines):
             elif '.float' in line:
                 # Store a single floating-point value
                 value = float(line.split('.float')[1].strip())
+                filled += 4 - filled%4
                 label_mem[current_label] = mem_start_address+filled
                 data_memory[mem_start_address+filled] = value
                 filled += 4
@@ -170,14 +172,14 @@ def parse_data_section(lines):
                 string = line.split('.asciiz')[1].strip().strip('"')
                 label_mem[current_label] = mem_start_address+filled
                 data_memory[mem_start_address + filled] = string + '\0'
-                filled += len(string)+1+(4-(len(string)+1)%4)
+                filled += len(string)+1
                 current_label = None
 
             elif '.space' in line:
                 # Reserve space (specified number of bytes)
                 size = int(line.split('.space')[1].strip())
                 label_mem[current_label] = mem_start_address+filled  # Reserve with '0' as placeholders
-                filled += size + (4-(size%4))
+                filled += size
                 current_label = None
 
 
@@ -242,6 +244,8 @@ def parse_text_section(lines):
                         immediate = format(int((label_mem[tokens[3]]-itr-4)/4),'016b')
                     instruction_memory += opcode+rs+rt+immediate
                     itr = itr+4
+                
+                if(instruction == "addi"):
 
                 rs = reg_addressMap[tokens[1]]
                 rt = reg_addressMap[tokens[2]]
