@@ -264,19 +264,22 @@ def parse_text_section(lines):
                     itr += 4
 
                 if (instruction == "addi"):
-
                     rs = reg_addressMap[tokens[1]]
                     rt = reg_addressMap[tokens[2]]
                     imm = bin(int(tokens[3]))[2:].zfill(16)
                     insturction_memory += opcode + rs + rt + imm
-            elif instruction in funct_dict:  # R-type instruction
+                    
+            elif instruction in funct_dict:  # R-type instruction(Completed) (Only 1 instruction template for each R-type instruction)
                 opcode = '000000'
                 rs = reg_addressMap[tokens[2]]
-                rt = reg_addressMap[tokens[0]]
+                rt = reg_addressMap[tokens[3]]
+                rd = reg_addressMap[tokens[1]]
+                func = func_dict[instruction]
+                instruction_memory += opcode + rs + rt + rd + '00000' + func
+                itr += 4
+
 
 # Subroutine Address (Completed)
-
-
 def subroute_add(lines):
     itr = pc_start
     for line in lines:
@@ -291,9 +294,8 @@ def subroute_add(lines):
                 itr -= 4
         itr += 4
 
+
 # Function to parse a .asm file
-
-
 def parse_asm_file(file_path):
 
     with open(file_path, 'r') as file:
