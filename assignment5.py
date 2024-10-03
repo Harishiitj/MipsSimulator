@@ -321,12 +321,81 @@ def parse_asm_file(file_path):
         print(data_section_lines)
         print(text_section_lines)
 
-        # Parse .data section
+        # Parse .data sections
         parse_data_section(data_section_lines)
 
         # Parse .text section
         subroute_add(text_section_lines)
         parse_text_section(text_section_lines)
+
+# # Instruction Decoding 
+# def decode_and_execute(instruction):
+#     opcode = instruction[0:6]  # First 6 bits are the opcode
+#     if opcode == '000000':  # R-type instructions
+#         rs = instruction[6:11]
+#         rt = instruction[11:16]
+#         rd = instruction[16:21]
+#         shamt = instruction[21:26]  # shift amount (not used in your current instructions)
+#         funct = instruction[26:32]  # Last 6 bits are the function code
+
+#         # Decode R-type instructions
+#         if funct == funct_dict['add']:  # Add
+#             reg_values[rd] = reg_values[rs] + reg_values[rt]
+#         elif funct == funct_dict['sub']:  # Subtract
+#             reg_values[rd] = reg_values[rs] - reg_values[rt]
+#         elif funct == funct_dict['and']:  # Bitwise AND
+#             reg_values[rd] = reg_values[rs] & reg_values[rt]
+#         elif funct == funct_dict['or']:  # Bitwise OR
+#             reg_values[rd] = reg_values[rs] | reg_values[rt]
+#         elif funct == funct_dict['slt']:  # Set Less Than
+#             reg_values[rd] = 1 if reg_values[rs] < reg_values[rt] else 0
+
+#     elif opcode in opcode_dict.values():  # I-type instructions
+#         rs = instruction[6:11]
+#         rt = instruction[11:16]
+#         imm = instruction[16:32]  # Last 16 bits are the immediate value
+#         immediate = int(imm, 2) if imm[0] == '0' else -(int(imm, 2) ^ 0xFFFF) - 1  # Handle signed immediate
+
+#         # Decode I-type instructions
+#         if opcode == opcode_dict['addi']:  # Add immediate
+#             reg_values[rt] = reg_values[rs] + immediate
+#         elif opcode == opcode_dict['lw']:  # Load word
+#             address = reg_values[rs] + immediate  # Effective address
+#             reg_values[rt] = data_memory.get(address, 0)  # Load word from memory
+#         elif opcode == opcode_dict['beq']:  # Branch if equal
+#             if reg_values[rs] == reg_values[rt]:
+#                 pc_offset = immediate << 2  # Branch offset is immediate * 4
+#                 return pc_offset  # Adjust the program counter
+#         elif opcode == opcode_dict['j']:  # J-type instructions (Jump)
+#             target_address = int(instruction[6:], 2) << 2  # Target address is 26 bits shifted left by 2
+#             return target_address - pc_start  # Return the offset to jump to
+
+#     return None  # No need to change PC if there's no branch or jump
+
+
+# def simulate_mips():
+#     itr = 0
+#     while itr < len(instruction_memory):
+#         # Fetch 32-bit instruction from memory
+#         instruction = instruction_memory[itr:itr+32]
+#         print(f"Executing instruction at itr={itr}: {instruction}")
+
+#         # Decode and execute the instruction
+#         pc_offset = decode_and_execute(instruction)
+
+#         # Update program counter
+#         if pc_offset is not None:
+#             itr += pc_offset*8
+#         else:
+#             itr += 32  # Move to the next instruction (each instruction is 32 bits)
+
+
+# # After parsing, simulate the instructions
+# simulate_mips()
+
+# # Output the final state of registers and data memory
+# print("Final Register Values:", reg_values)
+# print("Final Data Memory:", data_memory)
 
 
 # Example usage
