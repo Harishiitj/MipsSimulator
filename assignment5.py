@@ -87,7 +87,7 @@ pc_start = 4194304
 pc = pc_start
 
 # define instruction memory
-instruction_memory = ""
+instruction_memory = list("")
 
 # instrunction type
 instruction_type = {
@@ -206,62 +206,13 @@ def parse_text_section(lines):
             if instruction in opcode_dict:  # I-type or J-type instruction
                 opcode = opcode_dict[instruction]
                 if (instruction == "lw"):
-                    immediate = ""
-                    rs = ""
-                    rt = reg_addressMap[tokens[1]]
-                    # case: lw $t1, -100($t0)
-                    if re.match(r'[-]?\d+\(\$\w+\)', tokens[2]):
-                        match = re.match(r'([-]?\d+)\((\$\w+)\)', tokens[2])
-                        immediate = bin(int(match.group(1)) & 0xFFFF)[
-                            2:].zfill(16)  # Immediate value
-                        rs = reg_addressMap[match.group(2)]  # Base register
-
-                    # Case: lw $t1, ($t2)
-                    elif re.match(r'\(\$\w+\)', tokens[2]):
-                        immediate = "0000000000000000"  # Zero offset
-                        rs = reg_addressMap[re.match(
-                            r'\(\$(\w+)\)', tokens[2]).group(1)]  # Base register
-
-                    # Case: lw $t1, label
-                    elif tokens[2] in label_mem:
-                        # Label address as immediate
-                        reg_values['00001'] = format(mem_start_address, '032b')
-                        immediate = format(
-                            label_mem[tokens[2]] - mem_start_address, '032b')
-                        rs = "00001"  # No base register, use 0
-
-                    instruction_memory += opcode+rs+rt+immediate
-                    itr = itr+4
+                    itr = ins_lw(tokens=tokens,itr=itr)
 
                 if (instruction == "beq"):
-                    # Handle the case of beq $t1, $t2, label (Register-Register)
-                    immediate = ""
-                    # Check if second operand is a register
-                    if re.match(r'\$\w+', tokens[2]):
-                        rs = reg_addressMap[tokens[1]]  # First register ($t1)
-                        rt = reg_addressMap[tokens[2]]  # Second register ($t2)
-                        label = tokens[3]               # The label
-                        immediate = format(
-                            int((label_mem[label]-itr-4)/4), '016b')
-
-                    # Handle the case of beq $t1, immediate, label (Register-Immediate)
-                    # Check if second operand is an immediate
-                    elif re.match(r'-?\d+', tokens[2]):
-                        rs = reg_addressMap[tokens[1]]  # First register ($t1)
-                        reg_values['00001'] = int(tokens[2])  # compare value
-                        rt = reg_addressMap["$at"]
-                        immediate = format(
-                            int((label_mem[tokens[3]]-itr-4)/4), '016b')
-                    instruction_memory += opcode+rs+rt+immediate
-                    itr = itr+4
+                    itr = ins_beq(tokens=tokens, itr=itr)
 
                 if (instruction == "j"):
-                    # j loop1
-                    label = tokens[1]  # the label to jump to
-                    # convert the target address to a 26-bit binary value with 2 right shift
-                    address = format(int(label_mem[label] / 4), '026b')
-                    instruction_memory += opcode+address
-                    itr += 4
+                    ins_jump(tokens=tokens,itr=itr)
 
                 if (instruction == "addi"):
                     rs = reg_addressMap[tokens[1]]
@@ -279,7 +230,101 @@ def parse_text_section(lines):
                 itr += 4
 
 
-# Subroutine Address (Completed)
+def ins_lw(tokens, itr):
+    immediate = ""
+    rs = ""
+    rt = reg_addressMap[tokens[1]]
+    # case: lw $t1, -100($t0)
+    if re.match(r'[-]?\d+\(\$\w+\)', tokens[2]):
+        match = re.match(r'([-]?\d+)\((\$\w+)\)', tokens[2])
+        immediate = bin(int(match.group(1)) & 0xFFFF)[2:].zfill(16)  # Immediate value
+        rs = reg_addressMap[match.group(2)]  # Base register
+
+    # Case: lw $t1, ($t2)
+    elif re.match(r'\(\$\w+\)', tokens[2]):
+        immediate = "0000000000000000"  # Zero offset
+        rs = reg_addressMap[re.match(
+            r'\(\$(\w+)\)', tokens[2]).group(1)]  # Base register
+
+    # Case: lw $t1, label
+    elif tokens[2] in label_mem:
+        # Label address as immediate
+        reg_values['00001'] = format(mem_start_address, '032b')
+        immediate = format(
+            label_mem[tokens[2]] - mem_start_address, '032b')
+        rs = "00001"  # No base register, use 0
+    instruction_memory += tokens[0]+rs+rt+immediate
+    itr += 4
+    return itr
+
+def ins_beq(tokens, itr):
+    # Handle the case of beq $t1, $t2, label (Register-Register)
+    immediate = ""
+    # Check if second operand is a register
+    if re.match(r'\$\w+', tokens[2]):
+        rs = reg_addressMap[tokens[1]]  # First register ($t1)
+        rt = reg_addressMap[tokens[2]]  # Second register ($t2)
+        label = tokens[3]               # The label
+        immediate = format(
+            int((label_mem[label]-itr-4)/4), '016b')
+
+    # Handle the case of beq $t1, immediate, label (Register-Immediate)
+    # Check if second operand is an immediate
+    elif re.match(r'-?\d+', tokens[2]):
+        rs = reg_addressMap[tokens[1]]  # First register ($t1)
+        reg_values['00001'] = int(tokens[2])  # compare value
+        rt = reg_addressMap["$at"]
+        immediate = format(
+            int((label_mem[tokens[3]]-itr-4)/4), '016b')
+    instruction_memory += tokens[0]+rs+rt+immediate
+    itr += 4
+    return itr
+
+def ins_jump(tokens, instruction_memory, itr):
+    # j loop1
+    label = tokens[1]  # the label to jump to
+    # convert the target address to a 26-bit binary value with 2 right shift
+    address = format(int(label_mem[label] / 4), '026b')
+    instruction_memory += tokens[0]+address
+    itr += 4
+    return itr
+
+def ins_lui(rt, immediate, instruction_memory, itr):
+    rt_add = reg_addressMap[rt]
+    instruction_memory += '001111'+'00000'+rt_add+immediate
+    itr += 4
+    return itr
+
+def ins_ori(rs, rt, immediate, instruction_memory, itr):
+    rt_add = reg_addressMap[rt]
+    rs_add = reg_addressMap[rs]
+    instruction_memory += '001101'+rs_add+rt_add+immediate
+    itr+=4
+    return itr
+
+def ins_addi(tokens, instruction_memory, itr):
+    # Extract components from the tokens
+    opcode = tokens[0]  # opcode for addi is in opcode_dict
+    rt = reg_addressMap[tokens[1]]  # Destination register ($t1)
+    rs = reg_addressMap[tokens[2]]  # Source register ($t2)
+    
+    # Parse the immediate value (tokens[3])
+    immediate_value = int(tokens[3])
+    
+    # Check if the immediate fits in 16 bits (signed)
+    if -32768 <= immediate_value <= 32767:
+        # Handle the case of a 16-bit signed immediate
+        imm_binary = format(immediate_value & 0xFFFF, '016b')  # Convert to 16-bit binary, masking the value
+    
+    else:
+        # Handle the case of a 32-bit immediate (assuming extended support)
+        imm_binary = format(immediate_value & 0xFFFFFFFF, '032b')  # Convert to 32-bit binary
+        ins_lui(rt='$at',immediate=imm_binary[:16],instruction_memory=instruction_memory,itr=itr)
+
+    # Concatenate the final binary instruction (assuming the immediate is 16 bits, extend handling if needed)
+    instruction_binary = opcode + rs + rt + imm_binary[-16:]  # Use last 16 bits if it's larger than 16-bit
+    
+# Subroutine Address (Comleted)
 def subroute_add(lines):
     itr = pc_start
     for line in lines:
