@@ -154,7 +154,7 @@ def parse_data_section(lines):
             if '.word' in line:
                 # Store a single word (4 bytes) in memory
                 value = int(line.split('.word')[1].strip())
-                filled += 4-filled % 4
+                if filled%4!=0 : filled += 4 - (filled%4)
                 label_mem[current_label] = mem_start_address+filled
                 data_memory[mem_start_address+filled] = value
                 filled += 4
@@ -163,7 +163,7 @@ def parse_data_section(lines):
             elif '.float' in line:
                 # Store a single floating-point value
                 value = float(line.split('.float')[1].strip())
-                filled += 4 - filled % 4
+                if filled%4!=0 : filled += 4 - filled % 4
                 label_mem[current_label] = mem_start_address+filled
                 data_memory[mem_start_address+filled] = value
                 filled += 4
@@ -206,30 +206,21 @@ def parse_text_section(lines):
             tokens = [token for token in tokens if token]
             instruction = tokens[0]
             if instruction in opcode_dict:  # I-type or J-type instruction
-                opcode = opcode_dict[instruction]
                 if (instruction == "lw"):
-                    itr = ins_lw(tokens=tokens,itr=itr)
+                    itr = ins_lw(tokens,itr)
 
-                if (instruction == "beq"):
-                    itr = ins_beq(tokens=tokens, itr=itr)
+                elif (instruction == "beq"):
+                    itr = ins_beq(tokens,itr)
 
-                if (instruction == "j"):
-                    ins_jump(tokens=tokens,itr=itr)
+                elif (instruction == "j"):
+                    itr = ins_jump(tokens,itr)
 
-                if (instruction == "addi"):
-                    rs = reg_addressMap[tokens[1]]
-                    rt = reg_addressMap[tokens[2]]
-                    imm = bin(int(tokens[3]))[2:].zfill(16)
-                    insturction_memory += opcode + rs + rt + imm
+                elif (instruction == "addi"):
+                    itr = ins_addi(tokens,itr)
                     
             elif instruction in funct_dict:  # R-type instruction(Completed) (Only 1 instruction template for each R-type instruction)
-                opcode = '000000'
-                rs = reg_addressMap[tokens[2]]
-                rt = reg_addressMap[tokens[3]]
-                rd = reg_addressMap[tokens[1]]
-                func = funct_dict[instruction]
-                instruction_memory += opcode + rs + rt + rd + '00000' + func
-                itr += 4
+                itr = ins_rtype(tokens,itr)
+    return instruction_memory
 
 def ins_lw(tokens, itr):
     global instruction_memory
@@ -284,7 +275,7 @@ def ins_beq(tokens, itr):
         itr = ins_addi(tokens1,itr)
         label = tokens[3]
         tokens1 = ["beq","$at",tokens[1],label]
-        itr = ins_beq[tokens1,itr]
+        itr = ins_beq(tokens1,itr)
     return itr
 
 def ins_jump(tokens, itr):
@@ -501,3 +492,6 @@ parse_asm_file(file_path)
 # Output data_memory and instruction_binaries
 print("Label_memory:", label_mem)
 print("Data Memory:", data_memory)
+instruction_memory_parts = [instruction_memory[i:i+32] for i in range(0, len(instruction_memory), 32)]
+for instruction in instruction_memory_parts:
+    print(hex(int(instruction,2)), '\n')
