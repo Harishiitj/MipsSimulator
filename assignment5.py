@@ -76,7 +76,7 @@ reg_values = {
 
 # define data memory
 mem_start_address = 268500992
-filled = int(0)
+filled = 0
 data_memory = {}
 
 # define label mem
@@ -87,7 +87,7 @@ pc_start = 4194304
 pc = pc_start
 
 # define instruction memory
-instruction_memory = list("")
+instruction_memory = ""
 
 # instrunction type
 instruction_type = {
@@ -99,6 +99,8 @@ instruction_type = {
     'slt': 'R-type',
 
     # I-type instructions
+    'lui' :'I-type',
+    'ori' : 'I-type',
     'addi': 'I-type',    # Add immediate
     'lw': 'I-type',      # Load word
     'beq': 'I-type',     # Branch if equal
@@ -107,10 +109,11 @@ instruction_type = {
     'j': 'J-type',       # Jump
 }
 
-
 # instruction Opcode mapping
 opcode_dict = {
     # I-type instructions
+    'lui' : '001111',
+    'ori' : '001101',
     'addi': '001000',   # Add immediate
     'lw': '100011',     # Load word
     'beq': '000100',    # Branch if equal
@@ -119,7 +122,7 @@ opcode_dict = {
     'j': '000010',      # Jump
 }
 
-# instruction func section mapping
+# instruction func bits mapping
 funct_dict = {
     'add': '100000',    # Addition
     'sub': '100010',    # Subtraction
@@ -129,7 +132,6 @@ funct_dict = {
 }
 
 # endregion
-
 
 def parse_data_section(lines):
     global filled
@@ -152,7 +154,7 @@ def parse_data_section(lines):
             if '.word' in line:
                 # Store a single word (4 bytes) in memory
                 value = int(line.split('.word')[1].strip())
-                filled = 4-filled % 4
+                filled += 4-filled % 4
                 label_mem[current_label] = mem_start_address+filled
                 data_memory[mem_start_address+filled] = value
                 filled += 4
@@ -183,9 +185,9 @@ def parse_data_section(lines):
                 filled += size
                 current_label = None
 
-
 # Parse .text section
 def parse_text_section(lines):
+    global instruction_memory
     text_section = True
     itr = pc_start
     for line in lines:
@@ -229,8 +231,9 @@ def parse_text_section(lines):
                 instruction_memory += opcode + rs + rt + rd + '00000' + func
                 itr += 4
 
-
 def ins_lw(tokens, itr):
+    global instruction_memory
+    opcode = opcode_dict[tokens[0]]
     immediate = ""
     rs = ""
     rt = reg_addressMap[tokens[1]]
@@ -239,48 +242,53 @@ def ins_lw(tokens, itr):
         match = re.match(r'([-]?\d+)\((\$\w+)\)', tokens[2])
         immediate = bin(int(match.group(1)) & 0xFFFF)[2:].zfill(16)  # Immediate value
         rs = reg_addressMap[match.group(2)]  # Base register
+        instruction_memory += opcode+rs+rt+immediate
+        itr+=4
 
     # Case: lw $t1, ($t2)
     elif re.match(r'\(\$\w+\)', tokens[2]):
         immediate = "0000000000000000"  # Zero offset
-        rs = reg_addressMap[re.match(
-            r'\(\$(\w+)\)', tokens[2]).group(1)]  # Base register
+        rs = reg_addressMap[re.match(r'\(\$(\w+)\)', tokens[2]).group(1)]  # Base register
+        instruction_memory += opcode+rs+rt+immediate
+        itr+=4
 
     # Case: lw $t1, label
     elif tokens[2] in label_mem:
         # Label address as immediate
-        reg_values['00001'] = format(mem_start_address, '032b')
-        immediate = format(
-            label_mem[tokens[2]] - mem_start_address, '032b')
-        rs = "00001"  # No base register, use 0
-    instruction_memory += tokens[0]+rs+rt+immediate
-    itr += 4
+        lui_imm_binary = format(mem_start_address, '032b')
+        itr = ins_lui(rt="$at",immediate=lui_imm_binary[:16],itr=itr)
+        immediate = label_mem[tokens[2]] - mem_start_address
+        t3= str(immediate)+'('+"$at"+')'
+        tokens1 = ["lw",tokens[1],t3]
+        itr = ins_lw(tokens=tokens1,itr=itr)
     return itr
 
 def ins_beq(tokens, itr):
-    # Handle the case of beq $t1, $t2, label (Register-Register)
+    global instruction_memory
+    opcode = opcode_dict[tokens[0]]
     immediate = ""
+    # Handle the case of beq $t1, $t2, label (Register-Register)
     # Check if second operand is a register
     if re.match(r'\$\w+', tokens[2]):
         rs = reg_addressMap[tokens[1]]  # First register ($t1)
         rt = reg_addressMap[tokens[2]]  # Second register ($t2)
         label = tokens[3]               # The label
-        immediate = format(
-            int((label_mem[label]-itr-4)/4), '016b')
+        immediate = format(int((label_mem[label]-itr-4)/4),'016b')
+        instruction_memory += opcode + rs + rt + immediate
+        itr += 4
 
     # Handle the case of beq $t1, immediate, label (Register-Immediate)
     # Check if second operand is an immediate
     elif re.match(r'-?\d+', tokens[2]):
-        rs = reg_addressMap[tokens[1]]  # First register ($t1)
-        reg_values['00001'] = int(tokens[2])  # compare value
-        rt = reg_addressMap["$at"]
-        immediate = format(
-            int((label_mem[tokens[3]]-itr-4)/4), '016b')
-    instruction_memory += tokens[0]+rs+rt+immediate
-    itr += 4
+        tokens1 = ["addi","$at","$zero",tokens[2]]
+        itr = ins_addi(tokens1,itr)
+        label = tokens[3]
+        tokens1 = ["beq","$at",tokens[1],label]
+        itr = ins_beq[tokens1,itr]
     return itr
 
-def ins_jump(tokens, instruction_memory, itr):
+def ins_jump(tokens, itr):
+    global instruction_memory
     # j loop1
     label = tokens[1]  # the label to jump to
     # convert the target address to a 26-bit binary value with 2 right shift
@@ -289,22 +297,25 @@ def ins_jump(tokens, instruction_memory, itr):
     itr += 4
     return itr
 
-def ins_lui(rt, immediate, instruction_memory, itr):
+def ins_lui(rt, immediate, itr): # immediate should be in binary string format rs = "$t0" or "$8" form
+    global instruction_memory
     rt_add = reg_addressMap[rt]
     instruction_memory += '001111'+'00000'+rt_add+immediate
     itr += 4
     return itr
 
-def ins_ori(rs, rt, immediate, instruction_memory, itr):
+def ins_ori(rs, rt, immediate, itr): # immediate should be in binary string format rs/rt = "$t0" or "$8" form
+    global instruction_memory
     rt_add = reg_addressMap[rt]
     rs_add = reg_addressMap[rs]
     instruction_memory += '001101'+rs_add+rt_add+immediate
     itr+=4
     return itr
 
-def ins_addi(tokens, instruction_memory, itr):
+def ins_addi(tokens, itr):
+    global instruction_memory
     # Extract components from the tokens
-    opcode = tokens[0]  # opcode for addi is in opcode_dict
+    opcode = opcode_dict[tokens[0]]  # opcode for addi is in opcode_dict
     rt = reg_addressMap[tokens[1]]  # Destination register ($t1)
     rs = reg_addressMap[tokens[2]]  # Source register ($t2)
     
@@ -315,15 +326,58 @@ def ins_addi(tokens, instruction_memory, itr):
     if -32768 <= immediate_value <= 32767:
         # Handle the case of a 16-bit signed immediate
         imm_binary = format(immediate_value & 0xFFFF, '016b')  # Convert to 16-bit binary, masking the value
+        instruction_binary = opcode + rs + rt + imm_binary[-16:]  # Use last 16 bits if it's larger than 16-bit
+        itr += 4
     
     else:
         # Handle the case of a 32-bit immediate (assuming extended support)
         imm_binary = format(immediate_value & 0xFFFFFFFF, '032b')  # Convert to 32-bit binary
-        ins_lui(rt='$at',immediate=imm_binary[:16],instruction_memory=instruction_memory,itr=itr)
-
-    # Concatenate the final binary instruction (assuming the immediate is 16 bits, extend handling if needed)
-    instruction_binary = opcode + rs + rt + imm_binary[-16:]  # Use last 16 bits if it's larger than 16-bit
+        itr = ins_lui(rt="$at",immediate=imm_binary[:16],itr=itr)
+        itr = ins_ori(rs="$at",rt="$at",immediate=imm_binary[15:],itr=itr)
+        tokens1 = ["add",tokens[1],tokens[2],"$at"]
+        itr = ins_rtype(tokens1,itr=itr)
+    return itr
     
+def ins_rtype(tokens,itr):
+    global instruction_memory
+    # R-type instruction(Completed) (Only 1 instruction template for each R-type instruction)
+    opcode = '000000'
+    instruction = tokens[0]
+    rs = reg_addressMap[tokens[2]]
+    rt = reg_addressMap[tokens[3]]
+    rd = reg_addressMap[tokens[1]]
+    func = funct_dict[instruction]
+    instruction_memory += opcode + rs + rt + rd + '00000' + func
+    itr += 4
+    return itr
+
+def signExtend(bin_string):
+     # Check the most significant bit (MSB)
+    msb = bin_string[0]
+    # Extend with 16 copies of the MSB
+    sign_extended = msb * 16 + bin_string
+    return sign_extended
+
+def signedBinToInt32(bin_string):
+     # Convert binary string to integer
+    integer_value = int(bin_string, 2)
+    
+    # Check if the binary string represents a negative number
+    if bin_string[0] == '1':  # If the sign bit is set
+        # Perform two's complement to get the negative value
+        integer_value -= 2**32  # Subtract 2^32 for signed interpretation
+    return integer_value
+
+def signedBinToInt16(bin_string):
+    # Convert binary string to integer
+    integer_value = int(bin_string, 2)
+    
+    # Check if the binary string represents a negative number
+    if bin_string[0] == '1':  # If the sign bit is set
+        # Perform two's complement to get the negative value
+        integer_value -= 2**16  # Subtract 2^32 for signed interpretation
+    return integer_value
+
 # Subroutine Address (Comleted)
 def subroute_add(lines):
     itr = pc_start
@@ -339,10 +393,8 @@ def subroute_add(lines):
                 itr -= 4
         itr += 4
 
-
 # Function to parse a .asm file
 def parse_asm_file(file_path):
-
     with open(file_path, 'r') as file:
         lines = file.readlines()
         in_data_section = False
@@ -441,7 +493,6 @@ def parse_asm_file(file_path):
 # # Output the final state of registers and data memory
 # print("Final Register Values:", reg_values)
 # print("Final Data Memory:", data_memory)
-
 
 # Example usage
 file_path = 'example.asm'  # Path to your asm file
