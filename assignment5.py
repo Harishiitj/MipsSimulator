@@ -101,8 +101,8 @@ instruction_type = {
     'slt': 'R-type',
 
     # I-type instructions
-    'lui' :'I-type',
-    'ori' : 'I-type',
+    'lui': 'I-type',
+    'ori': 'I-type',
     'addi': 'I-type',    # Add immediate
     'lw': 'I-type',      # Load word
     'beq': 'I-type',     # Branch if equal
@@ -114,8 +114,8 @@ instruction_type = {
 # instruction Opcode mapping
 opcode_dict = {
     # I-type instructions
-    'lui' : '001111',
-    'ori' : '001101',
+    'lui': '001111',
+    'ori': '001101',
     'addi': '001000',   # Add immediate
     'lw': '100011',     # Load word
     'beq': '000100',    # Branch if equal
@@ -135,7 +135,9 @@ funct_dict = {
 
 # endregion
 
-#parse .data section
+# parse .data section
+
+
 def parse_data_section(lines):
     global filled
     current_label = None
@@ -157,7 +159,8 @@ def parse_data_section(lines):
             if '.word' in line:
                 # Store a single word (4 bytes) in memory
                 value = int(line.split('.word')[1].strip())
-                if filled%4!=0 : filled += 4 - (filled%4)
+                if filled % 4 != 0:
+                    filled += 4 - (filled % 4)
                 label_mem[current_label] = mem_start_address+filled
                 data_memory[mem_start_address+filled] = value
                 filled += 4
@@ -166,7 +169,8 @@ def parse_data_section(lines):
             elif '.float' in line:
                 # Store a single floating-point value
                 value = float(line.split('.float')[1].strip())
-                if filled%4!=0 : filled += 4 - filled % 4
+                if filled % 4 != 0:
+                    filled += 4 - filled % 4
                 label_mem[current_label] = mem_start_address+filled
                 data_memory[mem_start_address+filled] = value
                 filled += 4
@@ -183,12 +187,15 @@ def parse_data_section(lines):
             elif '.space' in line:
                 # Reserve space (specified number of bytes)
                 size = int(line.split('.space')[1].strip())
-                label_mem[current_label] = mem_start_address + filled  # Reserve with '0' as placeholders
+                label_mem[current_label] = mem_start_address + \
+                    filled  # Reserve with '0' as placeholders
                 data_memory[mem_start_address + filled] = '\0' * size
                 filled += size
                 current_label = None
 
 # Parse .text section
+
+
 def parse_text_section(lines):
     global instruction_memory
     text_section = True
@@ -212,21 +219,35 @@ def parse_text_section(lines):
             instruction = tokens[0]
             if instruction in opcode_dict:  # I-type or J-type instruction
                 if (instruction == "lw"):
-                    itr = ins_lw(tokens,itr)
+                    itr = ins_lw(tokens, itr)
 
                 elif (instruction == "beq"):
-                    itr = ins_beq(tokens,itr)
+                    itr = ins_beq(tokens, itr)
 
                 elif (instruction == "j"):
-                    itr = ins_jump(tokens,itr)
+                    itr = ins_jump(tokens, itr)
 
                 elif (instruction == "addi"):
-                    itr = ins_addi(tokens,itr)
-                    
-            elif instruction in funct_dict:  # R-type instruction(Completed) (Only 1 instruction template for each R-type instruction)
-                itr = ins_rtype(tokens,itr)     
+                    itr = ins_addi(tokens, itr)
+
+            # R-type instruction(Completed) (Only 1 instruction template for each R-type instruction)
+            elif instruction in funct_dict:
+                itr = ins_rtype(tokens, itr)
+
+            elif (instruction == "la"):  # Handle the 'la' instruction
+                # la $t0, label
+                rt = tokens[1]
+                address = tokens[2]
+                itr = ins_la(rt, address, itr)
+
+            elif instruction == "li":  # li $t0,100
+                rt = tokens[1]
+                immediate = tokens[2]
+                itr = ins_li(tokens, itr)
+
     instruction_memory = update_instructions()
     return instruction_memory
+
 
 def ins_lw(tokens, itr):
     global instruction_memory
@@ -237,28 +258,31 @@ def ins_lw(tokens, itr):
     # case: lw $t1, -100($t0)
     if re.match(r'[-]?\d+\(\$\w+\)', tokens[2]):
         match = re.match(r'([-]?\d+)\((\$\w+)\)', tokens[2])
-        immediate = bin(int(match.group(1)) & 0xFFFF)[2:].zfill(16)  # Immediate value
+        immediate = bin(int(match.group(1)) & 0xFFFF)[
+            2:].zfill(16)  # Immediate value
         rs = reg_addressMap[match.group(2)]  # Base register
         instruction_memory += opcode+rs+rt+immediate
-        itr+=4
+        itr += 4
 
     # Case: lw $t1, ($t2)
     elif re.match(r'\(\$\w+\)', tokens[2]):
         immediate = "0000000000000000"  # Zero offset
-        rs = reg_addressMap[re.match(r'\(\$(\w+)\)', tokens[2]).group(1)]  # Base register
+        rs = reg_addressMap[re.match(
+            r'\(\$(\w+)\)', tokens[2]).group(1)]  # Base register
         instruction_memory += opcode+rs+rt+immediate
-        itr+=4
+        itr += 4
 
     # Case: lw $t1, label
     elif tokens[2] in label_mem:
         # Label address as immediate
         lui_imm_binary = format(mem_start_address, '032b')
-        itr = ins_lui(rt="$at",immediate=lui_imm_binary[:16],itr=itr)
+        itr = ins_lui(rt="$at", immediate=lui_imm_binary[:16], itr=itr)
         immediate = label_mem[tokens[2]] - mem_start_address
-        t3= str(immediate)+'('+"$at"+')'
-        tokens1 = ["lw",tokens[1],t3]
-        itr = ins_lw(tokens=tokens1,itr=itr)
+        t3 = str(immediate)+'('+"$at"+')'
+        tokens1 = ["lw", tokens[1], t3]
+        itr = ins_lw(tokens=tokens1, itr=itr)
     return itr
+
 
 def ins_beq(tokens, itr):
     global instruction_memory
@@ -272,19 +296,20 @@ def ins_beq(tokens, itr):
         label = tokens[3]               # The label
         # immediate = format(int((label_mem[label]-itr-4)/4),'016b')
         immediate = "0000000000000000"
-        branching_queue.append(("beq",itr,tokens[3]))
+        branching_queue.append(("beq", itr, tokens[3]))
         instruction_memory += opcode + rs + rt + immediate
         itr += 4
 
     # Handle the case of beq $t1, immediate, label (Register-Immediate)
     # Check if second operand is an immediate
     elif re.match(r'-?\d+', tokens[2]):
-        tokens1 = ["addi","$at","$zero",tokens[2]]
-        itr = ins_addi(tokens1,itr)
+        tokens1 = ["addi", "$at", "$zero", tokens[2]]
+        itr = ins_addi(tokens1, itr)
         label = tokens[3]
-        tokens1 = ["beq","$at",tokens[1],label]
-        itr = ins_beq(tokens1,itr)
+        tokens1 = ["beq", "$at", tokens[1], label]
+        itr = ins_beq(tokens1, itr)
     return itr
+
 
 def ins_jump(tokens, itr):
     global instruction_memory
@@ -293,25 +318,29 @@ def ins_jump(tokens, itr):
     # convert the target address to a 26-bit binary value with 2 right shift
     # address = format(int(label_mem[label] / 4), '026b')
     address = "00000000000000000000000000"
-    branching_queue.append(("jump",itr,label))
+    branching_queue.append(("jump", itr, label))
     instruction_memory += opcode_dict[tokens[0]]+address
     itr += 4
     return itr
 
-def ins_lui(rt, immediate, itr): # immediate should be in binary string format rs = "$t0" or "$8" form
+
+def ins_lui(rt, immediate, itr):  # immediate should be in binary string format rs = "$t0" or "$8" form
     global instruction_memory
     rt_add = reg_addressMap[rt]
     instruction_memory += '001111'+'00000'+rt_add+immediate
     itr += 4
     return itr
 
-def ins_ori(rs, rt, immediate, itr): # immediate should be in binary string format rs/rt = "$t0" or "$8" form
+
+# immediate should be in binary string format rs/rt = "$t0" or "$8" form
+def ins_ori(rs, rt, immediate, itr):
     global instruction_memory
     rt_add = reg_addressMap[rt]
     rs_add = reg_addressMap[rs]
     instruction_memory += '001101'+rs_add+rt_add+immediate
-    itr+=4
+    itr += 4
     return itr
+
 
 def ins_addi(tokens, itr):
     global instruction_memory
@@ -319,27 +348,105 @@ def ins_addi(tokens, itr):
     opcode = opcode_dict[tokens[0]]  # opcode for addi is in opcode_dict
     rt = reg_addressMap[tokens[1]]  # Destination register ($t1)
     rs = reg_addressMap[tokens[2]]  # Source register ($t2)
-    
+
     # Parse the immediate value (tokens[3])
     immediate_value = int(tokens[3])
-    
+
     # Check if the immediate fits in 16 bits (signed)
     if -32768 <= immediate_value <= 32767:
         # Handle the case of a 16-bit signed immediate
-        imm_binary = format(immediate_value & 0xFFFF, '016b')  # Convert to 16-bit binary, masking the value
-        instruction_memory += opcode + rs + rt + imm_binary  # Use last 16 bits if it's larger than 16-bit
+        # Convert to 16-bit binary, masking the value
+        imm_binary = format(immediate_value & 0xFFFF, '016b')
+        # Use last 16 bits if it's larger than 16-bit
+        instruction_memory += opcode + rs + rt + imm_binary
         itr += 4
-    
+
     else:
         # Handle the case of a 32-bit immediate (assuming extended support)
-        imm_binary = format(immediate_value & 0xFFFFFFFF, '032b')  # Convert to 32-bit binary
-        itr = ins_lui(rt="$at",immediate=imm_binary[:16],itr=itr)
-        itr = ins_ori(rs="$at",rt="$at",immediate=imm_binary[15:],itr=itr)
-        tokens1 = ["add",tokens[1],tokens[2],"$at"]
-        itr = ins_rtype(tokens1,itr=itr)
+        imm_binary = format(immediate_value & 0xFFFFFFFF,
+                            '032b')  # Convert to 32-bit binary
+        itr = ins_lui(rt="$at", immediate=imm_binary[:16], itr=itr)
+        itr = ins_ori(rs="$at", rt="$at", immediate=imm_binary[15:], itr=itr)
+        tokens1 = ["add", tokens[1], tokens[2], "$at"]
+        itr = ins_rtype(tokens1, itr=itr)
     return itr
-    
-def ins_rtype(tokens,itr):
+
+
+def ins_la(rt, address, itr):
+    global instruction_memory
+    if isinstance(address, str):  # If address is a label
+        if address in label_mem:
+            # Get the actual address from the label
+            address = label_mem[address]
+
+        immediate_value = address
+        if -32768 <= immediate_value <= 32767:
+            # Use addi instruction for 16-bit immediate
+            tokens = ["addi", rt, "$zero", str(immediate_value)]
+            itr = ins_addi(tokens, itr)
+
+        else:
+            # Handle 32-bit immediate using lui and ori
+            immediate_binary = format(immediate_value & 0xFFFFFFFF, '032b')
+            itr = ins_lui(rt="$at", immediate=immediate_binary[:16], itr=itr)
+            itr = ins_ori(rs="$at", rt=rt,
+                          immediate=immediate_binary[16:], itr=itr)
+
+    elif isinstance(address, int):  # If address is a direct integer
+        immediate_value = address
+        if -32768 <= immediate_value <= 32767:
+            tokens = ["addi", rt, "$zero", str(immediate_value)]
+            itr = ins_addi(tokens, itr)
+
+        else:
+            immediate_binary = format(immediate_value & 0xFFFFFFFF, '032b')
+            itr = ins_lui(rt="$at", immediate=immediate_binary[:16], itr=itr)
+            itr = ins_ori(rs="$at", rt=rt,
+                          immediate=immediate_binary[16:], itr=itr)
+
+    elif isinstance(address, tuple) and len(address) == 2:  # If address is a register offset
+        rt_reg = address[0]
+        offset = address[1]
+        tokens = ["addi", rt, rt_reg, str(offset)]
+        itr = ins_addi(tokens, itr)
+
+    return itr
+
+
+def ins_li(tokens, itr):
+    global instruction_memory
+    rt = reg_addressMap[tokens[1]]  # Destination register (e.g., $t1)
+    immediate_value = int(tokens[2])  # Immediate value (e.g., 100 or -100)
+
+    # Case 1: 16-bit signed immediate (sign-extended)
+    if -32768 <= immediate_value <= 32767:
+        # Use addiu for small immediate values (sign-extended)
+        imm_binary = format(immediate_value & 0xFFFF, '016b')
+        instruction_memory += '001001' + '00000' + rt + \
+            imm_binary  # 'addiu $t1, $zero, immediate'
+        itr += 4
+
+    # Case 2: 16-bit unsigned immediate (zero-extended)
+    elif 0 <= immediate_value <= 65535:
+        # Handle 16-bit unsigned immediate (zero-extended)
+        imm_binary = format(immediate_value & 0xFFFF, '016b')
+        # tokens = ["ori", "$zero", tokens[1], imm_binary]
+        itr = ins_ori("$zero", tokens[1], imm_binary, itr)
+
+    # Case 3: 32-bit immediate (handled using LUI and ORI)
+    else:
+        imm_binary = format(immediate_value & 0xFFFFFFFF,
+                            '032b')  # Convert to 32-bit binary
+        # Load upper 16 bits with LUI
+        itr = ins_lui(rt="$at", immediate=imm_binary[:16], itr=itr)
+        # Load lower 16 bits with ORI
+        itr = ins_ori(rs="$at", rt=tokens[1],
+                      immediate=imm_binary[16:], itr=itr)
+
+    return itr
+
+
+def ins_rtype(tokens, itr):
     global instruction_memory
     # R-type instruction(Completed) (Only 1 instruction template for each R-type instruction)
     opcode = '000000'
@@ -353,50 +460,61 @@ def ins_rtype(tokens,itr):
     return itr
 
 # necessary during execution
+
+
 def signExtend(bin_string):
-     # Check the most significant bit (MSB)
+    # Check the most significant bit (MSB)
     msb = bin_string[0]
     # Extend with 16 copies of the MSB
     sign_extended = msb * 16 + bin_string
     return sign_extended
 
+
 def signedBinToInt32(bin_string):
-     # Convert binary string to integer
+    # Convert binary string to integer
     integer_value = int(bin_string, 2)
-    
+
     # Check if the binary string represents a negative number
     if bin_string[0] == '1':  # If the sign bit is set
         # Perform two's complement to get the negative value
         integer_value -= 2**32  # Subtract 2^32 for signed interpretation
     return integer_value
 
+
 def signedBinToInt16(bin_string):
     # Convert binary string to integer
     integer_value = int(bin_string, 2)
-    
+
     # Check if the binary string represents a negative number
     if bin_string[0] == '1':  # If the sign bit is set
         # Perform two's complement to get the negative value
         integer_value -= 2**16  # Subtract 2^32 for signed interpretation
     return integer_value
 
-#updateinstructions for branching instructions
+# updateinstructions for branching instructions
+
+
 def update_instructions():
     global instruction_memory
     instruction_list = list(instruction_memory)
-    while(len(branching_queue)>0):
+    while (len(branching_queue) > 0):
         instruction = branching_queue.pop()   # type ("beq", itr, label)
         instruction_address = 8*(instruction[1]-pc_start)
-        if(instruction[0] == "beq"):
-            imm_binary = format(int((label_mem[instruction[2]]-instruction[1]-4)/4) & 0xFFFF,'016b')
-            instruction_list[instruction_address+16:instruction_address+32] = imm_binary
-        elif(instruction[0] == "jump"):
+        if (instruction[0] == "beq"):
+            imm_binary = format(
+                int((label_mem[instruction[2]]-instruction[1]-4)/4) & 0xFFFF, '016b')
+            instruction_list[instruction_address +
+                             16:instruction_address+32] = imm_binary
+        elif (instruction[0] == "jump"):
             imm_binary = format(int(label_mem[instruction[2]] / 4), '026b')
-            instruction_list[instruction_address+6:instruction_address+32] = imm_binary
+            instruction_list[instruction_address +
+                             6:instruction_address+32] = imm_binary
     instruction_memory = "".join(instruction_list)
     return instruction_memory
 
 # Function to parse a .asm file
+
+
 def parse_asm_file(file_path):
     with open(file_path, 'r') as file:
         lines = file.readlines()
@@ -425,25 +543,29 @@ def parse_asm_file(file_path):
         parse_text_section(text_section_lines)
 
 # Instruction Decoding
-def decode_and_execute(instruction,curr_pc):
-    ## All Mips Datapath value
+
+
+def decode_and_execute(instruction, curr_pc):
+    # All Mips Datapath value
     opcode = instruction[0:6]  # First 6 bits are the opcode
     rs = instruction[6:11]
     rt = instruction[11:16]
     rd = instruction[16:21]
-    shamt = instruction[21:26]  # shift amount (not used in your current instructions)
+    # shift amount (not used in your current instructions)
+    shamt = instruction[21:26]
     funct = instruction[26:32]  # Last 6 bits are the function code
     immediate = instruction[16:32]
     sign_extend = immediate
-    if immediate[0] == '0' : 
+    if immediate[0] == '0':
         sign_extend = '0000000000000000' + sign_extend
-    else :
+    else:
         sign_extend = '1111111111111111' + sign_extend
     address = instruction[6:32]
     next_pc = format((curr_pc + 4) & 0xFFFFFFFF, '032b')
     jump_add = next_pc[0:4] + address + '00'
-    branch_add = format((int(next_pc,2) + (int(sign_extend,2)<<2)) & 0xFFFFFFFF, '032b')
-    
+    branch_add = format(
+        (int(next_pc, 2) + (int(sign_extend, 2) << 2)) & 0xFFFFFFFF, '032b')
+
     control_signals = {
         "RegDst": None,
         "Jump": None,
@@ -454,7 +576,7 @@ def decode_and_execute(instruction,curr_pc):
         "MemWrite": None,
         "ALUSrc": None,
         "RegWrite": None
-    }  
+    }
 
     # Decoding the instruction based on opcode
     if opcode == '000000':  # R-type instruction
@@ -489,7 +611,7 @@ def decode_and_execute(instruction,curr_pc):
         control_signals["Branch"] = 0
         control_signals["Jump"] = 0
         control_signals["ALUOp"] = '00'  # ALU performs addition
-    
+
     elif opcode == '000100':  # beq instruction
         control_signals["RegDst"] = None
         control_signals["ALUSrc"] = 0
@@ -500,7 +622,7 @@ def decode_and_execute(instruction,curr_pc):
         control_signals["Branch"] = 1
         control_signals["Jump"] = 0
         control_signals["ALUOp"] = '01'  # ALU performs subtraction
-    
+
     elif opcode == '000010':  # j instruction
         control_signals["RegDst"] = None
         control_signals["ALUSrc"] = None
@@ -518,9 +640,11 @@ def decode_and_execute(instruction,curr_pc):
         read_reg2 = rt
         write_reg = rd
         if funct == funct_dict['add']:  # Add
-            reg_values[write_reg] = reg_values[read_reg1] + reg_values[read_reg2]
+            reg_values[write_reg] = reg_values[read_reg1] + \
+                reg_values[read_reg2]
         elif funct == funct_dict['sub']:  # Subtract
-            reg_values[write_reg] = reg_values[read_reg1] - reg_values[read_reg2]
+            reg_values[write_reg] = reg_values[read_reg1] - \
+                reg_values[read_reg2]
         elif funct == funct_dict['and']:  # Bitwise AND
             reg_values[write_reg] = reg_values[read_reg1] & reg_values[read_reg2]
         elif funct == funct_dict['or']:  # Bitwise OR
@@ -529,9 +653,9 @@ def decode_and_execute(instruction,curr_pc):
             reg_values[write_reg] = 1 if reg_values[read_reg1] < reg_values[read_reg2] else 0
 
     elif opcode in opcode_dict.values():  # I-type instructions
-        immediate_sign = int(immediate, 2) 
+        immediate_sign = int(immediate, 2)
         if immediate[0] == '1':
-           immediate_sign -= (2**32) # Handle signed immediate
+            immediate_sign -= (2**32)  # Handle signed immediate
         # Decode I-type instructions
         if opcode == opcode_dict['addi']:  # Add immediate
             reg_values[rt] = reg_values[rs] + immediate_sign
@@ -543,10 +667,12 @@ def decode_and_execute(instruction,curr_pc):
         #         pc_offset = immediate << 2  # Branch offset is immediate * 4
         #         return pc_offset  # Adjust the program counter
         elif opcode == opcode_dict['j']:  # J-type instructions (Jump)
-            target_address = int(instruction[6:], 2) << 2  # Target address is 26 bits shifted left by 2
+            # Target address is 26 bits shifted left by 2
+            target_address = int(instruction[6:], 2) << 2
             return target_address - pc_start  # Return the offset to jump to
 
     return None  # No need to change PC if there's no branch or jump
+
 
 def simulate_mips():
     itr = 0
@@ -556,15 +682,16 @@ def simulate_mips():
         print(f"Executing instruction at itr={itr}: {instruction}")
 
         # Decode and execute the instruction
-        pc_offset = decode_and_execute(instruction,(itr//4)+pc_start)
+        pc_offset = decode_and_execute(instruction, (itr//4)+pc_start)
 
         # Update program counter
         if pc_offset is not None:
             itr += pc_offset*8
         else:
-            itr += 32  # Move to the next instruction (each instruction is 32 bits)
+            # Move to the next instruction (each instruction is 32 bits)
+            itr += 32
 
-# # Instruction Decoding 
+# # Instruction Decoding
 # def decode_and_execute(instruction):
 #     opcode = instruction[0:6]  # First 6 bits are the opcode
 #     if opcode == '000000':  # R-type instructions
@@ -638,9 +765,9 @@ file_path = 'example.asm'  # Path to your asm file
 parse_asm_file(file_path)
 
 # Output data_memory and instruction_binaries
-print("Label_memory:", label_mem,"\n")
+print("Label_memory:", label_mem, "\n")
 print("Data Memory:", data_memory, "\n")
-instruction_memory_parts = [instruction_memory[i:i+32] for i in range(0, len(instruction_memory), 32)]
+instruction_memory_parts = [instruction_memory[i:i+32]
+                            for i in range(0, len(instruction_memory), 32)]
 for instruction in instruction_memory_parts:
-    print(hex(int(instruction,2)), '\n')
-
+    print(f"{int(instruction, 2):08x}")
