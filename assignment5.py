@@ -119,7 +119,7 @@ opcode_dict = {
     'addi': '001000',   # Add immediate
     'lw': '100011',     # Load word
     'beq': '000100',    # Branch if equal
-
+    'addiu': '001001',
     # J-type instructions
     'j': '000010',      # Jump
 }
@@ -372,43 +372,60 @@ def ins_addi(tokens, itr):
     return itr
 
 
+def ins_addiu(tokens, itr):
+    global instruction_memory
+    # Extract components from the tokens
+    opcode = opcode_dict["addiu"]  # opcode for addiu
+    rt = reg_addressMap[tokens[1]]  # Destination register ($t1)
+    rs = reg_addressMap[tokens[2]]  # Source register ($t2)
+
+    # Parse the immediate value (tokens[3])
+    immediate_value = int(tokens[3])
+
+    # Check if the immediate fits in 16 bits (unsigned)
+    if 0 <= immediate_value <= 65535:
+        # Handle the case of a 16-bit unsigned immediate
+        imm_binary = format(immediate_value & 0xFFFF, '016b')
+        # Add the instruction to the instruction memory
+        instruction_memory += opcode + rs + rt + imm_binary
+        itr += 4
+
+    else:
+        # For 32-bit immediate values, split it with lui and ori
+        imm_binary = format(immediate_value & 0xFFFFFFFF, '032b')
+        # Use lui and ori to load the 32-bit immediate into $at
+        itr = ins_lui(rt="$at", immediate=imm_binary[:16], itr=itr)
+        itr = ins_ori(rs="$at", rt="$at", immediate=imm_binary[16:], itr=itr)
+        # Then use add to add the base register
+        tokens1 = ["add", tokens[1], tokens[2], "$at"]
+        itr = ins_rtype(tokens1, itr=itr)
+
+    return itr
+
+
 def ins_la(rt, address, itr):
     global instruction_memory
-    if isinstance(address, str):  # If address is a label
-        if address in label_mem:
-            # Get the actual address from the label
-            address = label_mem[address]
+    if address in label_mem:
+        # Get the actual address from the label
+        address = label_mem[address]
 
-        immediate_value = address
-        if -32768 <= immediate_value <= 32767:
-            # Use addi instruction for 16-bit immediate
-            tokens = ["addi", rt, "$zero", str(immediate_value)]
-            itr = ins_addi(tokens, itr)
+    immediate_value = int(address)
+    if 0 <= immediate_value <= 65535:
+        # Use addi instruction for 16-bit immediate
+        immediate_bin = format(immediate_value, '016b')
+        itr = ins_ori("$zero", rt, immediate_bin, itr)
 
-        else:
-            # Handle 32-bit immediate using lui and ori
-            immediate_binary = format(immediate_value & 0xFFFFFFFF, '032b')
-            itr = ins_lui(rt="$at", immediate=immediate_binary[:16], itr=itr)
-            itr = ins_ori(rs="$at", rt=rt,
-                          immediate=immediate_binary[16:], itr=itr)
-
-    elif isinstance(address, int):  # If address is a direct integer
-        immediate_value = address
-        if -32768 <= immediate_value <= 32767:
-            tokens = ["addi", rt, "$zero", str(immediate_value)]
-            itr = ins_addi(tokens, itr)
-
-        else:
-            immediate_binary = format(immediate_value & 0xFFFFFFFF, '032b')
-            itr = ins_lui(rt="$at", immediate=immediate_binary[:16], itr=itr)
-            itr = ins_ori(rs="$at", rt=rt,
-                          immediate=immediate_binary[16:], itr=itr)
-
-    elif isinstance(address, tuple) and len(address) == 2:  # If address is a register offset
-        rt_reg = address[0]
-        offset = address[1]
-        tokens = ["addi", rt, rt_reg, str(offset)]
+    elif -32768 <= immediate_value < 0:
+        # Use addi instruction for 16-bit immediate
+        tokens = ["addiu", rt, "$zero", str(immediate_value)]
         itr = ins_addi(tokens, itr)
+
+    else:
+        # Handle 32-bit immediate using lui and ori
+        immediate_binary = format(immediate_value & 0xFFFFFFFF, '032b')
+        itr = ins_lui(rt="$at", immediate=immediate_binary[:16], itr=itr)
+        itr = ins_ori(rs="$at", rt=rt,
+                      immediate=immediate_binary[16:], itr=itr)
 
     return itr
 
