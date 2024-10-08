@@ -456,6 +456,7 @@ def decode_and_execute(instruction,curr_pc):
         "RegWrite": None
     }  
 
+    # region setting control signals
     # Decoding the instruction based on opcode
     if opcode == '000000':  # R-type instruction
         control_signals["RegDst"] = 1
@@ -512,6 +513,8 @@ def decode_and_execute(instruction,curr_pc):
         control_signals["Jump"] = 1
         control_signals["ALUOp"] = None
 
+    #endregion
+
     if opcode == '000000':  # R-type instructions
         # Decode R-type instructions
         read_reg1 = rs
@@ -563,6 +566,22 @@ def simulate_mips():
             itr += pc_offset*8
         else:
             itr += 32  # Move to the next instruction (each instruction is 32 bits)
+
+# def instructionFetch(pc):
+#     instruction_add = (pc - pc_start)*8
+#     pc = pc + 4
+#     return (pc, instruction_memory[instruction_add : instruction_add+32])
+
+# def instructionDecode(pc, instruction):
+#     opcode = opcode_dict[instruction[:6]]
+#     ReadReg1 = instruction[6:11]
+#     ReadReg2 = instruction[11:16]
+#     rd = instruction[16:21]
+#     immediate_address = instruction[16:32]
+
+#     #generating control 
+#     control = control_dict[opcode]
+    
 
 # # Instruction Decoding 
 # def decode_and_execute(instruction):
